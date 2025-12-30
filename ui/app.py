@@ -1,11 +1,21 @@
 import json
 import os
+import sys
+from pathlib import Path
+
 import pandas as pd
-import requests
 import streamlit as st
 
-API_URL = "http://127.0.0.1:8000/evaluate"
+# ✅ Make imports work when app.py is inside /ui
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT))
+
+from app.models import OpportunityInput  # noqa
+from app.agent import mock_decision      # noqa
+from app.memory import append_memory, build_record  # noqa
+
 MEMORY_PATH = os.getenv("MEMORY_PATH", "memory/decisions.jsonl")
+
 
 def load_memory_as_dataframe(path: str) -> pd.DataFrame:
     rows = []
@@ -20,7 +30,7 @@ def load_memory_as_dataframe(path: str) -> pd.DataFrame:
             try:
                 rec = json.loads(line)
                 opp = rec.get("opportunity", {}) or {}
-                dec = rec.get("decision", {}) or {}
+                res = rec.get("result", {}) or {}  # ✅ FIX: your memory uses "result"
 
                 rows.append({
                     "timestamp": rec.get("timestamp", ""),
@@ -30,23 +40,18 @@ def load_memory_as_dataframe(path: str) -> pd.DataFrame:
                     "expected_time_days": opp.get("expected_time_days", ""),
                     "cost_to_fulfill": opp.get("cost_to_fulfill", ""),
                     "expected_earnings": opp.get("expected_earnings", ""),
-                    "decision": dec.get("decision", ""),
-                    "confidence": dec.get("confidence", ""),
-                    "total_score": (dec.get("score", {}) or {}).get("total_score", ""),
-                    "summary": dec.get("summary", ""),
+                    "decision": res.get("decision", ""),
+                    "confidence": res.get("confidence", ""),
+                    "total_score": (res.get("score", {}) or {}).get("total_score", ""),
+                    "summary": res.get("summary", ""),
                 })
             except Exception:
-                # skip malformed lines
                 continue
 
     return pd.DataFrame(rows)
 
-st.set_page_config(
-    page_title="Decision-Making AI Agent",
-    page_icon="🧠",
-    layout="wide",
-)
 
+st.set_page_config(page_title="Decision-Making AI Agent", page_icon="🧠", layout="wide")
 st.title("🧠 Decision-Making AI Agent")
 st.caption("Rule-based agent that evaluates opportunities and explains the decision.")
 
@@ -121,14 +126,17 @@ with right:
         }
 
         try:
-            res = requests.post(API_URL, json=payload, timeout=20)
-            data = res.json()
-            if res.status_code != 200:
-                st.error(f"API error ({res.status_code}): {data}")
-            else:
-                st.session_state.last_result = data
+            opportunity = OpportunityInput(**payload)
+            decision_output = mock_decision(opportunity)
+
+            # Save memory (JSONL)
+            append_memory(build_record(opportunity, decision_output))
+
+            # Show result in UI
+            st.session_state.last_result = decision_output.model_dump()
+
         except Exception as e:
-            st.error(f"Could not reach the API. Is FastAPI running on 127.0.0.1:8000?\n\n{e}")
+            st.error(f"Evaluation error:\n\n{e}")
 
     data = st.session_state.last_result
 
@@ -140,7 +148,6 @@ with right:
         score = data.get("score", {}) or {}
         total_score = int(score.get("total_score", 0))
 
-        # Decision header card (simple HTML for a nicer look)
         st.markdown(
             f"""
             <div style="
@@ -192,7 +199,6 @@ with right:
                     st.write(f"- {a}")
 
         with st.expander("📊 Score breakdown", expanded=False):
-            # Show key score fields nicely
             c1, c2 = st.columns(2)
             with c1:
                 st.metric("ROI", f"{score.get('roi', 0)}")
@@ -203,7 +209,6 @@ with right:
                 st.metric("Motivation score", score.get("motivation_score", 0))
                 st.metric("Total score", score.get("total_score", 0))
 
-            # Full raw JSON (optional)
             st.caption("Raw score object")
             st.json(score)
 
@@ -223,6 +228,3 @@ else:
         use_container_width=True,
     )
     st.caption(f"Exported rows: {len(df)}")
-
-st.caption("Tip: Keep FastAPI running in one terminal and Streamlit UI in another.")
-
