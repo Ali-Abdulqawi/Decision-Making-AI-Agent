@@ -1,3 +1,5 @@
+from app.agent import mock_decision
+from app.memory import append_memory, build_record
 import json
 import os
 import sys
