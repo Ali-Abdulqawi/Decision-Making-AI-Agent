@@ -1,5 +1,3 @@
-from app.agent import mock_decision
-from app.memory import append_memory, build_record
 import json
 import os
 import sys
@@ -8,13 +6,13 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-# ✅ Make imports work when app.py is inside /ui
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT))
+# ✅ Make imports work on Streamlit Cloud (project root in PYTHONPATH)
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR))
 
-from app.models import OpportunityInput  # noqa
-from app.agent import mock_decision      # noqa
-from app.memory import append_memory, build_record  # noqa
+from app.agent import mock_decision
+from app.models import OpportunityInput
+from app.memory import append_memory, build_record
 
 MEMORY_PATH = os.getenv("MEMORY_PATH", "memory/decisions.jsonl")
 
@@ -32,7 +30,7 @@ def load_memory_as_dataframe(path: str) -> pd.DataFrame:
             try:
                 rec = json.loads(line)
                 opp = rec.get("opportunity", {}) or {}
-                res = rec.get("result", {}) or {}  # ✅ FIX: your memory uses "result"
+                dec = rec.get("decision", {}) or {}
 
                 rows.append({
                     "timestamp": rec.get("timestamp", ""),
@@ -42,10 +40,10 @@ def load_memory_as_dataframe(path: str) -> pd.DataFrame:
                     "expected_time_days": opp.get("expected_time_days", ""),
                     "cost_to_fulfill": opp.get("cost_to_fulfill", ""),
                     "expected_earnings": opp.get("expected_earnings", ""),
-                    "decision": res.get("decision", ""),
-                    "confidence": res.get("confidence", ""),
-                    "total_score": (res.get("score", {}) or {}).get("total_score", ""),
-                    "summary": res.get("summary", ""),
+                    "decision": dec.get("decision", ""),
+                    "confidence": dec.get("confidence", ""),
+                    "total_score": (dec.get("score", {}) or {}).get("total_score", ""),
+                    "summary": dec.get("summary", ""),
                 })
             except Exception:
                 continue
@@ -53,9 +51,14 @@ def load_memory_as_dataframe(path: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-st.set_page_config(page_title="Decision-Making AI Agent", page_icon="🧠", layout="wide")
+st.set_page_config(
+    page_title="Decision-Making AI Agent",
+    page_icon="🧠",
+    layout="wide",
+)
+
 st.title("🧠 Decision-Making AI Agent")
-st.caption("Rule-based agent that evaluates opportunities and explains the decision.")
+st.caption("Streamlit-only (no FastAPI). Evaluates opportunities + stores memory + CSV export.")
 
 
 def decision_badge(decision: str) -> str:
@@ -113,32 +116,32 @@ with right:
         st.session_state.last_result = None
 
     if submitted:
-        payload = {
-            "opportunity_title": opportunity_title,
-            "client_type": client_type,
-            "description": description,
-            "expected_time_days": expected_time_days,
-            "cost_to_fulfill": cost_to_fulfill,
-            "expected_earnings": expected_earnings,
-            "expected_benefits": expected_benefits,
-            "can_close_within_timeframe": can_close,
-            "risks_and_concerns": risks,
-            "excitement_level": excitement,
-            "client_level": client_level,
-        }
-
         try:
-            opportunity = OpportunityInput(**payload)
-            decision_output = mock_decision(opportunity)
+            # ✅ Build Pydantic input (same schema as FastAPI)
+            opp = OpportunityInput(
+                opportunity_title=opportunity_title,
+                client_type=client_type,
+                description=description,
+                expected_time_days=expected_time_days,
+                cost_to_fulfill=cost_to_fulfill,
+                expected_earnings=expected_earnings,
+                expected_benefits=expected_benefits,
+                can_close_within_timeframe=can_close,
+                risks_and_concerns=risks,
+                excitement_level=excitement,
+                client_level=client_level,
+            )
 
-            # Save memory (JSONL)
-            append_memory(build_record(opportunity, decision_output))
+            # ✅ Decision locally (no API call)
+            decision_output = mock_decision(opp)
 
-            # Show result in UI
+            # ✅ Save to memory JSONL
+            append_memory(build_record(opp, decision_output))
+
             st.session_state.last_result = decision_output.model_dump()
 
         except Exception as e:
-            st.error(f"Evaluation error:\n\n{e}")
+            st.error(f"Evaluation failed:\n\n{e}")
 
     data = st.session_state.last_result
 
@@ -216,6 +219,7 @@ with right:
 
 st.divider()
 st.subheader("📤 Export")
+
 df = load_memory_as_dataframe(MEMORY_PATH)
 
 if df.empty:
@@ -230,3 +234,5 @@ else:
         use_container_width=True,
     )
     st.caption(f"Exported rows: {len(df)}")
+
+st.caption("Note: Streamlit Cloud storage is not permanent. Use DB/Google Sheets later if you want persistence.")
