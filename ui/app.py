@@ -30,7 +30,11 @@ def load_memory_as_dataframe(path: str) -> pd.DataFrame:
             try:
                 rec = json.loads(line)
                 opp = rec.get("opportunity", {}) or {}
-                dec = rec.get("decision", {}) or {}
+
+                # IMPORTANT:
+                # Your memory currently stores decision under "result" (from your screenshot)
+                # but we also support "decision" just in case.
+                dec = rec.get("result") or rec.get("decision") or {}
 
                 rows.append({
                     "timestamp": rec.get("timestamp", ""),
@@ -115,32 +119,31 @@ with right:
     if "last_result" not in st.session_state:
         st.session_state.last_result = None
 
- if submitted:
-    try:
-        # Build Pydantic input
-        opp = OpportunityInput(
-            opportunity_title=opportunity_title,
-            client_type=client_type,
-            description=description,
-            expected_time_days=expected_time_days,
-            cost_to_fulfill=cost_to_fulfill,
-            expected_earnings=expected_earnings,
-            expected_benefits=expected_benefits,
-            can_close_within_timeframe=can_close,
-            risks_and_concerns=risks,
-            excitement_level=excitement,
-            client_level=client_level,
-        )
+    if submitted:
+        try:
+            # ✅ Build Pydantic input (same schema as FastAPI)
+            opp = OpportunityInput(
+                opportunity_title=opportunity_title,
+                client_type=client_type,
+                description=description,
+                expected_time_days=expected_time_days,
+                cost_to_fulfill=cost_to_fulfill,
+                expected_earnings=expected_earnings,
+                expected_benefits=expected_benefits,
+                can_close_within_timeframe=can_close,
+                risks_and_concerns=risks,
+                excitement_level=excitement,
+                client_level=client_level,
+            )
 
-        # Decision locally (no API)
-        decision_output = mock_decision(opp)
+            # ✅ Decision locally (no API call)
+            decision_output = mock_decision(opp)
 
-        # Save to memory JSONL
-        append_memory(build_record(opp, decision_output))
+            # ✅ Save to memory JSONL
+            append_memory(build_record(opp, decision_output))
 
-        # Show result
-        st.session_state.last_result = decision_output.model_dump()
-
+            # ✅ Show result
+            st.session_state.last_result = decision_output.model_dump()
 
         except Exception as e:
             st.error(f"Evaluation failed:\n\n{e}")
