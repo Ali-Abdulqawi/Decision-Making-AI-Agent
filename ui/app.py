@@ -7,8 +7,9 @@ import pandas as pd
 import streamlit as st
 
 # ✅ Make imports work on Streamlit Cloud (project root in PYTHONPATH)
-ROOT_DIR = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT_DIR))
+ROOT_DIR = Path(__file__).resolve().parent.parent  # repo root
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.agent import mock_decision
 from app.models import OpportunityInput
