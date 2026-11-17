@@ -63,16 +63,18 @@ st.set_page_config(
 )
 
 st.title("🧠 Decision-Making AI Agent")
-st.caption("Streamlit-only (no FastAPI). Evaluates opportunities + stores memory + CSV export.")
+st.caption("Hybrid agent: rule-based scoring + optional GPT review. Evaluates opportunities, stores memory, exports CSV.")
 
 
 def decision_badge(decision: str) -> str:
     d = (decision or "").upper()
+    # HTML, not markdown: this text is rendered inside an HTML block,
+    # where **bold** would show up as literal asterisks.
     if d == "ACCEPT":
-        return "✅ **ACCEPT**"
+        return "✅ <b>ACCEPT</b>"
     if d == "REJECT":
-        return "❌ **REJECT**"
-    return "🟡 **NEEDS_INFO**"
+        return "❌ <b>REJECT</b>"
+    return "🟡 <b>NEEDS INFO</b>"
 
 
 def decision_color(decision: str) -> str:
@@ -193,7 +195,7 @@ with right:
             for r in data.get("key_reasons", []) or []:
                 st.write(f"- {r}")
 
-        with st.expander("⚠️ Risks", expanded=False):
+        with st.expander("⚠️ Risks", expanded=(decision != "ACCEPT")):
             risks_list = data.get("risks", []) or []
             if not risks_list:
                 st.write("No major risks detected.")
