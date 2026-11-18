@@ -177,12 +177,21 @@ def mock_decision(inp: OpportunityInput) -> DecisionOutput:
     summary = (f"{decision}: Score {s.total_score}/100. ROI={s.roi:.2f}, "
                f"Risk={s.risk_score}/25, Feasibility={s.feasibility_score}/25.")
 
+    # models.py allows at most 7 items per list, so cap everything here.
+    MAX_ITEMS = 7
     review = llm_review(inp, decision, score_dict)
     if review:
         if review.get("insight"):
             summary += f" AI insight: {review['insight']}"
-        risks += [f"(AI) {r}" for r in review.get("hidden_risks", [])[:3]]
-        next_actions += [f"(AI) {a}" for a in review.get("next_actions", [])[:3]]
+        ai_risks = [f"(AI) {r}" for r in review.get("hidden_risks", [])[:2]]
+        ai_actions = [f"(AI) {a}" for a in review.get("next_actions", [])[:2]]
+        # Keep room for the AI lines, then fill the rest with rule-based ones.
+        risks = risks[:MAX_ITEMS - len(ai_risks)] + ai_risks
+        next_actions = next_actions[:MAX_ITEMS - len(ai_actions)] + ai_actions
+
+    risks = risks[:MAX_ITEMS]
+    next_actions = next_actions[:MAX_ITEMS]
+    key_reasons = key_reasons[:MAX_ITEMS]
 
     return DecisionOutput(
         decision=decision,
